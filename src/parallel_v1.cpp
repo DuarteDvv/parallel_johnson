@@ -1,11 +1,9 @@
 #include "parallel_v1.hpp"
-#include <omp.h>
-
 
 
 #define DEBUG 0
 
-std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::vector<int>& active, int min_vertex){
+std::vector<std::vector<int>> BFS_foward_backward_SCCs_v1(Graph G, const std::vector<int>& active, int min_vertex){
     
     std::vector<std::vector<int>> SCCs;
 
@@ -85,18 +83,18 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::ve
     return SCCs;
 }
 
-void unblock_v0(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B) {
+void unblock_v1(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B) {
     blocked[u] = false;
     for (int w : B[u]) {
         if (blocked[w]) {
-            unblock_v0(w, blocked, B);
+            unblock_v1(w, blocked, B);
         }
     }
     B[u].clear();
 }
 
 
-bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
+bool circuit_v1(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
             std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B,
             std::vector<int>& stack, int& cycle_count) {
 
@@ -126,14 +124,14 @@ bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
             }
             found_cycle = true;
         } else if (!blocked[w]) {
-            if (circuit_v0(w, s, G, scc_set, blocked, B, stack, cycle_count)) {
+            if (circuit_v1(w, s, G, scc_set, blocked, B, stack, cycle_count)) {
                 found_cycle = true;
             }
         }
     }
 
     if (found_cycle) {
-        unblock_v0(v, blocked, B);
+        unblock_v1(v, blocked, B);
     } else {
         for (const Vertex* neighbor = out_begin; neighbor != out_end; ++neighbor) {
             int w = *neighbor;
@@ -150,53 +148,51 @@ bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
 
 }
 
+int johnson_cycles_parallel_v1(Graph G) {
 
-int johnson_cycles_parallel_v0(Graph G) {
     int n = G->num_nodes;
+    int s = 0; 
     int cycle_count = 0;
-    std::vector<int> active(G->num_nodes, 1);
-    
-    // Paralelização do loop principal
-    #pragma omp parallel
+    std::vector<int> active(G->num_nodes, 1); // todos ativos inicialmente
+
+
+    while (s < n)
     {
-        int local_cycle_count = 0;
+
+
+        std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v1(G, active, s);
         
-        #pragma omp for schedule(dynamic, 1)
-        for (int s = 0; s < n; s++) {
-            
-            // Cria cópia local de active para esta thread
-            std::vector<int> local_active = active;
-            
-            // Marca todos < s como inativos
-            for (int i = 0; i < s; i++) {
-                local_active[i] = 0;
+        
+        std::vector<int> scc_vertices;
+        for (const std::vector<int>& scc : SCCs) {
+            if (std::find(scc.begin(), scc.end(), s) != scc.end()) {
+                scc_vertices = scc;
+                break;
             }
-            
-            std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v0(G, local_active, s);
-            
-            std::vector<int> scc_vertices;
-            for (const std::vector<int>& scc : SCCs) {
-                if (std::find(scc.begin(), scc.end(), s) != scc.end()) {
-                    scc_vertices = scc;
-                    break;
-                }
-            }
-            
-            if (scc_vertices.empty()) {
-                continue;
-            }
-            
-            std::unordered_set<int> scc_set(scc_vertices.begin(), scc_vertices.end());
-            std::vector<bool> blocked(n, false);
-            std::vector<std::unordered_set<int>> B(n);
-            std::vector<int> stack;
-            
-            circuit_v0(s, s, G, scc_set, blocked, B, stack, local_cycle_count);
         }
-        
-        #pragma omp atomic
-        cycle_count += local_cycle_count;
+
+        if (scc_vertices.empty()) {
+            active[s] = 0;
+            s++;
+            continue; // nenhuma SCC contém s, passa para o próximo s
+        }
+
+
+        // Cria unordered_set para busca O(1)
+        std::unordered_set<int> scc_set(scc_vertices.begin(), scc_vertices.end());
+
+        std::vector<bool> blocked(n, false);
+        std::vector<std::unordered_set<int>> B(n);
+        std::vector<int> stack;
+
+        circuit_v1(s, s, G, scc_set, blocked, B, stack, cycle_count);
+  
+
+        active[s] = 0; // marca s como inativo ("remove" do grafo)
+        ++s;
     }
-    
+
+
     return cycle_count;
+    
 }

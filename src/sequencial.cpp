@@ -1,9 +1,13 @@
-#include "johnson_cycles.hpp"
+#include "sequencial.hpp"
 
 
 #define DEBUG 0
 
-std::vector<std::vector<int>> BFS_foward_backward_SCCs(Graph G, const std::vector<int>& active, int min_vertex){
+std::vector<std::vector<int>> BFS_foward_backward_SCCs(
+    Graph G, // grafo
+    const std::vector<int>& active, // vetor indicando se vértice está ativo (1) ou inativo (0) (ao invés de remover do grafo, marca como inativo)
+    int min_vertex // menor vértice a considerar (todos < min_vertex são inativos)
+){
     
     std::vector<std::vector<int>> SCCs;
 
@@ -83,7 +87,11 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs(Graph G, const std::vecto
     return SCCs;
 }
 
-void unblock(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B) {
+void unblock(
+    int u, // vértice a desbloquear
+    std::vector<bool>& blocked, // vetor de bloqueados
+    std::vector<std::unordered_set<int>>& B // listas de dependência
+) {
     blocked[u] = false;
     for (int w : B[u]) {
         if (blocked[w]) {
@@ -94,9 +102,16 @@ void unblock(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<i
 }
 
 
-int circuit(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
-            std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B,
-            std::vector<int>& stack, int& cycle_count) {
+bool circuit(
+    int v, // vértice atual da recursão (onde está)
+    int s, // vértice de origem (onde começou a busca e deve terminar o ciclo)
+    Graph G, // grafo
+    const std::unordered_set<int>& scc_set, // conjunto de vértices da SCC atual; qualquer vértice fora desse conjunto é ignorado.
+    std::vector<bool>& blocked, // vetor de vértices bloqueados (dependência)
+    std::vector<std::unordered_set<int>>& B, // vetor de conjuntos; B[w] armazena vértices que devem ser desbloqueados se w for desbloqueado. (dependência)
+    std::vector<int>& stack,  // pilha de vértices no caminho atual (dependência)
+    int& cycle_count // contador de ciclos encontrados (dependência)
+) {
 
     bool found_cycle = false;
     stack.push_back(v);
@@ -148,7 +163,9 @@ int circuit(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
 
 }
 
-int johnson_cycles(Graph G) {
+int johnson_cycles(
+    Graph G // grafo
+) {
 
     int n = G->num_nodes;
     int s = 0; 

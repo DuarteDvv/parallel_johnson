@@ -44,7 +44,7 @@ def generate_directed_graph(
 # ============================================================
 if __name__ == "__main__":
     # Configurações (você pode alterar)
-    num_nodes = 15
+    num_nodes = 17
     generate_directed_graph(
         num_nodes=num_nodes,   # número de nós
         p_edge=0.4,    # probabilidade de aresta

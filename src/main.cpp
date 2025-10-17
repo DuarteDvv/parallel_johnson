@@ -10,11 +10,11 @@
 
 #include "common/CycleTimer.h"
 #include "common/graph.h"
-#include "kosaraju.hpp"
-#include "johnson_cycles.hpp"
+#include "parallel_v0.hpp"
+#include "sequencial.hpp"
 
 
-#define USE_BINARY_GRAPH 1
+#define USE_BINARY_GRAPH 1 // Load graph from binary file if available
 #define DEBUG 0 // Print ?
 
 
@@ -81,9 +81,17 @@ int main(int argc, char** argv) {
     printf("       Number of simple cycles found: %d\n", sol);
     printf("----------------------------------------------------------\n");
 
-    if (DEBUG){
-        print_graph(g);
-    }
+    double start0 = CycleTimer::currentSeconds();
+    int sol0 = johnson_cycles_parallel_v0(g);
+    double end0 = CycleTimer::currentSeconds();
+    printf("Parallel v0 Johnson\n       Time taken: %.6f seconds\n", end0 - start0);
+    printf("       Number of simple cycles found: %d\n", sol0);
+    printf("       Speedup: %.2f\n", (end - start) / (end0 - start0));
+    printf("----------------------------------------------------------\n");
+
+   
+
+
 
     
    
