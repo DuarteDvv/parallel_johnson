@@ -159,7 +159,6 @@ int johnson_cycles_parallel_v1(Graph G) {
     while (s < n)
     {
 
-
         std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v1(G, active, s);
         
         
