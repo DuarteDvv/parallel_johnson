@@ -1,12 +1,7 @@
 #include "parallel_v4.hpp"
 
-
-#define PARALLEL_DEPTH 4
-#define PARALLEL_BRANCH 2
 #define PARALLEL_MIN_BRANCH 4
 #define PARALLEL_MAX_BRANCH 64
-#define PARALLEL_TOP_LEVEL_ONLY 1
-#define DEBUG 0
 #define SCC_SEQUENTIAL_RATIO 0.8
 
 std::vector<std::vector<int>> BFS_foward_backward_SCCs_v4(Graph G, const std::vector<int>& active, int min_vertex){
