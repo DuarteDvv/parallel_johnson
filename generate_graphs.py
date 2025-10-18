@@ -44,9 +44,9 @@ def generate_directed_graph(
 # ============================================================
 if __name__ == "__main__":
     
-    num_nodes = 18
+    num_nodes = 16
     generate_directed_graph(
         num_nodes=num_nodes,   
-        p_edge=0.4,    
+        p_edge=0.5,    
         filename=f"graph_{num_nodes}.txt"
     )
