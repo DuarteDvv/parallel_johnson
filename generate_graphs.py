@@ -43,11 +43,10 @@ def generate_directed_graph(
 # Exemplo de uso
 # ============================================================
 if __name__ == "__main__":
-    # Configurações (você pode alterar)
-    num_nodes = 17
+    
+    num_nodes = 18
     generate_directed_graph(
-        num_nodes=num_nodes,   # número de nós
-        p_edge=0.4,    # probabilidade de aresta
-        seed=123,      # semente aleatória
+        num_nodes=num_nodes,   
+        p_edge=0.4,    
         filename=f"graph_{num_nodes}.txt"
     )

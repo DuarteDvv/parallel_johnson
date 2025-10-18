@@ -1,5 +1,5 @@
-#ifndef PARALLEL_V1_HPP
-#define PARALLEL_V1_HPP
+#ifndef PARALLEL_V2_HPP
+#define PARALLEL_V2_HPP
 
 #include "graph.h"
 #include <vector>
@@ -8,8 +8,9 @@
 #include <unordered_set>
 #include "CycleTimer.h"
 #include <omp.h>
+#include <atomic>
 
-int johnson_cycles_parallel_v1(Graph G);
+int johnson_cycles_parallel_v2(Graph G);
 
-#endif // PARALLEL_V1_HPP
+#endif // PARALLEL_V2_HPP
 

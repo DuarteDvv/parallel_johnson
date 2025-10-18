@@ -1,18 +1,18 @@
-#include "parallel_v1.hpp"
+
+#include <iostream>
+#include <algorithm>
+#include <unordered_set>
 #include <omp.h>
-
-
+#include "common/CycleTimer.h"
+#include "parallel_v0.hpp"
 
 #define DEBUG 0
 
 std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::vector<int>& active, int min_vertex){
     
     std::vector<std::vector<int>> SCCs;
-
-    // removed[i] = 1 significa que já foi processado (já está em alguma SCC)
     std::vector<int> removed(G->num_nodes, 0);
     
-    // Marca vértices inativos como já removidos, e também vértices < min_vertex
     for (int i = 0; i < G->num_nodes; i++) {
         if (active[i] == 0 || i < min_vertex) {
             removed[i] = 1;
@@ -21,9 +21,9 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::ve
 
     for (int pivot = min_vertex; pivot < G->num_nodes; pivot++) {
 
-        if (removed[pivot] == 1) continue; // já removido ou inativo
+        if (removed[pivot] == 1) continue; 
 
-        // BFS forward (seguindo arestas de saída)
+        // Forward BFS
         std::vector<bool> visited_fwd(G->num_nodes, false);
         std::vector<int> frontier_fwd;
         frontier_fwd.push_back(pivot);
@@ -45,7 +45,7 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::ve
             frontier_fwd = new_frontier;
         }
 
-        // BFS backward (seguindo arestas de entrada)
+        // Backward BFS
         std::vector<bool> visited_bwd(G->num_nodes, false);
         std::vector<int> frontier_bwd;
         frontier_bwd.push_back(pivot);
@@ -72,7 +72,7 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs_v0(Graph G, const std::ve
         for (int i = 0; i < G->num_nodes; i++) {
             if (visited_fwd[i] && visited_bwd[i]) {
                 current_SCC.push_back(i);
-                removed[i] = 1; // marca como processado
+                removed[i] = 1; 
             }
         }
 
@@ -98,10 +98,9 @@ void unblock_v0(int u, std::vector<bool>& blocked, std::vector<std::unordered_se
 
 bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
             std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B,
-            std::vector<int>& stack, int& cycle_count) {
+        int& cycle_count) {
 
     bool found_cycle = false;
-    stack.push_back(v);
     blocked[v] = true;
 
     const Vertex* out_begin = outgoing_begin(G, v);
@@ -117,16 +116,9 @@ bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
         if (w == s) {
             // Ciclo encontrado
             cycle_count++;
-            if (DEBUG) {
-                std::cout << "Cycle " << cycle_count << ": ";
-                for (int node : stack) {
-                    std::cout << node << " ";
-                }
-                std::cout << s << std::endl;
-            }
             found_cycle = true;
         } else if (!blocked[w]) {
-            if (circuit_v0(w, s, G, scc_set, blocked, B, stack, cycle_count)) {
+            if (circuit_v0(w, s, G, scc_set, blocked, B, cycle_count)) {
                 found_cycle = true;
             }
         }
@@ -145,7 +137,6 @@ bool circuit_v0(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
         }
     }
 
-    stack.pop_back();
     return found_cycle;
 
 }
@@ -156,18 +147,20 @@ int johnson_cycles_parallel_v0(Graph G) {
     int cycle_count = 0;
     std::vector<int> active(G->num_nodes, 1);
     
-    // Paralelização do loop principal
+    
     #pragma omp parallel
     {
         int local_cycle_count = 0;
         
+        // paralelização do loop principal sobre s, cada thread processa valores diferentes de s
         #pragma omp for schedule(dynamic, 1)
         for (int s = 0; s < n; s++) {
+
+            double start = CycleTimer::currentSeconds();
             
-            // Cria cópia local de active para esta thread
+            // cópia local 
             std::vector<int> local_active = active;
             
-            // Marca todos < s como inativos
             for (int i = 0; i < s; i++) {
                 local_active[i] = 0;
             }
@@ -189,9 +182,16 @@ int johnson_cycles_parallel_v0(Graph G) {
             std::unordered_set<int> scc_set(scc_vertices.begin(), scc_vertices.end());
             std::vector<bool> blocked(n, false);
             std::vector<std::unordered_set<int>> B(n);
-            std::vector<int> stack;
+ 
             
-            circuit_v0(s, s, G, scc_set, blocked, B, stack, local_cycle_count);
+            circuit_v0(s, s, G, scc_set, blocked, B, local_cycle_count);
+
+            double end = CycleTimer::currentSeconds();
+
+            if (DEBUG) { //debug de gargalo
+                printf("Thread %d processed s=%d in %.6f seconds, found %d cycles.\n",
+                       omp_get_thread_num(), s, end - start, local_cycle_count);
+            }
         }
         
         #pragma omp atomic

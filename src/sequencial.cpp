@@ -109,12 +109,10 @@ bool circuit(
     const std::unordered_set<int>& scc_set, // conjunto de vértices da SCC atual; qualquer vértice fora desse conjunto é ignorado.
     std::vector<bool>& blocked, // vetor de vértices bloqueados (dependência)
     std::vector<std::unordered_set<int>>& B, // vetor de conjuntos; B[w] armazena vértices que devem ser desbloqueados se w for desbloqueado. (dependência)
-    std::vector<int>& stack,  // pilha de vértices no caminho atual (dependência)
     int& cycle_count // contador de ciclos encontrados (dependência)
 ) {
 
     bool found_cycle = false;
-    stack.push_back(v);
     blocked[v] = true;
 
     const Vertex* out_begin = outgoing_begin(G, v);
@@ -130,16 +128,9 @@ bool circuit(
         if (w == s) {
             // Ciclo encontrado
             cycle_count++;
-            if (DEBUG) {
-                std::cout << "Cycle " << cycle_count << ": ";
-                for (int node : stack) {
-                    std::cout << node << " ";
-                }
-                std::cout << s << std::endl;
-            }
             found_cycle = true;
         } else if (!blocked[w]) {
-            if (circuit(w, s, G, scc_set, blocked, B, stack, cycle_count)) {
+            if (circuit(w, s, G, scc_set, blocked, B, cycle_count)) {
                 found_cycle = true;
             }
         }
@@ -158,7 +149,6 @@ bool circuit(
         }
     }
 
-    stack.pop_back();
     return found_cycle;
 
 }
@@ -218,10 +208,10 @@ int johnson_cycles(
 
         std::vector<bool> blocked(n, false);
         std::vector<std::unordered_set<int>> B(n);
-        std::vector<int> stack;
+    // removido: stack
 
         double startCircuit = CycleTimer::currentSeconds();
-        circuit(s, s, G, scc_set, blocked, B, stack, cycle_count);
+    circuit(s, s, G, scc_set, blocked, B, cycle_count);
         double endCircuit = CycleTimer::currentSeconds();
         circuit_time += (endCircuit - startCircuit);
 

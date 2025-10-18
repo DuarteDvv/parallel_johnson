@@ -1,10 +1,10 @@
-#include "parallel_v1.hpp"
+#include "parallel_v2.hpp"
 
 #define PARALLEL_DEPTH 4
 #define PARALLEL_BRANCH 2
 #define DEBUG 0
 
-std::vector<std::vector<int>> BFS_foward_backward_SCCs_v1(Graph G, const std::vector<int>& active, int min_vertex){
+std::vector<std::vector<int>> BFS_foward_backward_SCCs_v2(Graph G, const std::vector<int>& active, int min_vertex){
 
     std::vector<std::vector<int>> SCCs;
     std::vector<int> removed(G->num_nodes, 0);
@@ -75,87 +75,86 @@ std::vector<std::vector<int>> BFS_foward_backward_SCCs_v1(Graph G, const std::ve
     return SCCs;
 }
 
-void unblock_v1(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B) {
+void unblock_v2(int u, std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B) {
 
     blocked[u] = false;
     for (int w : B[u]) {
         if (blocked[w]) {
-            unblock_v1(w, blocked, B);
+            unblock_v2(w, blocked, B);
         }
     }
     B[u].clear();
 }
 
 
-bool circuit_v1_parallel(int v, int s, Graph G, const std::unordered_set<int>& scc_set,
-            std::vector<bool>& blocked, std::vector<std::unordered_set<int>>& B,
-        int& cycle_count, int depth = 0) {
+bool circuit_v2_parallel(
+    int v, 
+    int s, 
+    Graph G, 
+    const std::unordered_set<int>& scc_set,
+    std::vector<bool>& blocked, 
+    std::vector<std::unordered_set<int>>& B,
+    int& cycle_count, int depth = 0
+) {
 
     bool found_cycle = false;
     blocked[v] = true;
 
     std::vector<int> neighbors;
     const Vertex* out_begin = outgoing_begin(G, v);
-    const Vertex* out_end = outgoing_end(G, v);
+    const Vertex* out_end   = outgoing_end(G, v);
+    neighbors.reserve(out_end - out_begin); // evita realocações
     for (const Vertex* neighbor = out_begin; neighbor != out_end; ++neighbor) {
         int w = *neighbor;
-        if (scc_set.find(w) == scc_set.end() || w < s) continue;
+        if (w < s) continue;
+        if (scc_set.find(w) == scc_set.end()) continue;
         neighbors.push_back(w);
     }
 
-    int branching = (int)neighbors.size();
-    std::vector<char> child_found(branching, 0);
+    const int branching = static_cast<int>(neighbors.size());
+    const bool allow_spawn = (depth < PARALLEL_DEPTH) && (branching >= PARALLEL_BRANCH);
 
-    for (int i = 0; i < branching; ++i) {
-        int w = neighbors[i];
+    std::atomic<bool> any_child_found(false);
 
-        if (w == s) {
+    #pragma omp taskgroup
+    {
+        for (int i = 0; i < branching; ++i) {
+            int w = neighbors[i];
 
-            #pragma omp atomic
-            cycle_count++;
-            
-            found_cycle = true;
-            child_found[i] = 1; 
-        }
-        else if (!blocked[w]) {
+            if (w == s) {
+                #pragma omp atomic
+                cycle_count++;
+                found_cycle = true; // local ao pai (ok)
 
-            bool spawn = (depth < PARALLEL_DEPTH) && (branching >= PARALLEL_BRANCH);
+            } else if (!blocked[w]) {
+                if (allow_spawn) {
 
-            if (spawn) {
-              
-                std::vector<bool> blocked_copy = blocked;
-                std::vector<std::unordered_set<int>> B_copy = B;
-               
-                #pragma omp task firstprivate(w, i, blocked_copy, B_copy, depth) shared(child_found, cycle_count, G, scc_set)
-                {
-                  
-                    bool child_res = circuit_v1_parallel(w, s, G, scc_set, blocked_copy, B_copy, cycle_count, depth + 1);
-                    child_found[i] = child_res ? 1 : 0;
-             
-                }
-            } else {
-            
-                if (circuit_v1_parallel(w, s, G, scc_set, blocked, B, cycle_count, depth + 1)) {
-                    found_cycle = true;
+                    std::vector<bool> blocked_copy = blocked;
+                    std::vector<std::unordered_set<int>> B_copy = B;
+
+                    #pragma omp task firstprivate(w, blocked_copy, B_copy, depth) shared(any_child_found, cycle_count, G, scc_set)
+                    {
+                        bool child_res = circuit_v2_parallel(w, s, G, scc_set, blocked_copy, B_copy,cycle_count, depth + 1);
+                        if (child_res) any_child_found.store(true, std::memory_order_relaxed);
+                    }
+                } else {
+                    if (circuit_v2_parallel(w, s, G, scc_set, blocked, B, cycle_count, depth + 1)) {
+                        found_cycle = true;
+                    }
                 }
             }
         }
+       
     }
 
-    #pragma omp taskwait
-
-
-    for (int i = 0; i < branching; ++i) {
-        if (child_found[i]) {
-            found_cycle = true;
-            
-        }
+    if (any_child_found.load(std::memory_order_relaxed)) {
+        found_cycle = true;
     }
 
     if (found_cycle) {
-        unblock_v1(v, blocked, B); 
+        unblock_v2(v, blocked, B); 
     } else {
-    
+      
         for (int w : neighbors) {
             B[w].insert(v);
         }
@@ -165,14 +164,15 @@ bool circuit_v1_parallel(int v, int s, Graph G, const std::unordered_set<int>& s
 }
 
 
-int johnson_cycles_parallel_v1(Graph G) {
+
+int johnson_cycles_parallel_v2(Graph G) {
     int n = G->num_nodes;
     int s = 0;
     int cycle_count = 0;
-    std::vector<int> active(G->num_nodes, 1); 
+    std::vector<int> active(G->num_nodes, 1); // todos ativos inicialmente
 
     while (s < n) {
-        std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v1(G, active, s);
+        std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v2(G, active, s);
 
         std::vector<int> scc_vertices;
         for (const std::vector<int>& scc : SCCs) {
@@ -192,15 +192,16 @@ int johnson_cycles_parallel_v1(Graph G) {
 
         std::vector<bool> blocked(n, false);
         std::vector<std::unordered_set<int>> B(n);
-   
+        std::vector<int> stack;
+
+     
         #pragma omp parallel
         {
             #pragma omp single
             {
-                
-                circuit_v1_parallel(s, s, G, scc_set, blocked, B, cycle_count, 0);
+                circuit_v2_parallel(s, s, G, scc_set, blocked, B, cycle_count, 0);
             }
-           
+        
         }
 
         active[s] = 0;

@@ -12,16 +12,20 @@
 #include "common/graph.h"
 #include "parallel_v0.hpp"
 #include "parallel_v1.hpp"
+#include "parallel_v2.hpp"
+#include "parallel_v3.hpp"
+#include "sequencial_aprox.hpp"
+#include "parallel_aprox.hpp"
 #include "sequencial.hpp"
 
 
 #define USE_BINARY_GRAPH 1 // Load graph from binary file if available
 #define DEBUG 0 // Print ?
+#define MAX_LEN_APPROX 7 // Max cycle length for approx version
 
 
 int main(int argc, char** argv) {
 
-    int  num_threads = -1;
     std::string graph_filename;
 
     if (argc < 2)
@@ -98,11 +102,39 @@ int main(int argc, char** argv) {
     printf("       Speedup: %.2f\n", (end - start) / (end1 - start1));
     printf("----------------------------------------------------------\n");
 
+    double start2 = CycleTimer::currentSeconds();
+    int sol2 = johnson_cycles_parallel_v2(g);
+    double end2 = CycleTimer::currentSeconds();
+    printf("Parallel v2 Johnson (Taskgroup)\n       Time taken: %.6f seconds\n", end2 - start2);
+    printf("       Number of simple cycles found: %d\n", sol2);
+    printf("       Speedup: %.2f\n", (end - start) / (end2 - start2));
+    printf("----------------------------------------------------------\n"); 
 
+    double start3 = CycleTimer::currentSeconds();
+    int sol3 = johnson_cycles_parallel_v3(g);
+    double end3 = CycleTimer::currentSeconds();
+    printf("Parallel v3 Johnson (Hybrid)\n       Time taken: %.6f seconds\n", end3 - start3);
+    printf("       Number of simple cycles found: %d\n", sol3);
+    printf("       Speedup: %.2f\n", (end - start) / (end3 - start3));
+    printf("----------------------------------------------------------\n"); 
 
-    
-   
-    
+    double start_aprox = CycleTimer::currentSeconds();
+    int sol_aprox = johnson_cycles_approx(g, MAX_LEN_APPROX);
+    double end_aprox = CycleTimer::currentSeconds();
+    printf("Sequencial Johnson Approx\n       Time taken: %.6f seconds\n", end_aprox - start_aprox);
+    printf("       Max cycle length: %d\n", MAX_LEN_APPROX);
+    printf("       Number of simple cycles found: %d\n", sol_aprox);
+    printf("----------------------------------------------------------\n"); 
+
+    double start_aprox_par = CycleTimer::currentSeconds();
+    int sol_aprox_par = johnson_cycles_approx_parallel(g, MAX_LEN_APPROX);
+    double end_aprox_par = CycleTimer::currentSeconds();
+    printf("Parallel Johnson Approx\n       Time taken: %.6f seconds\n", end_aprox_par - start_aprox_par);
+    printf("       Max cycle length: %d\n", MAX_LEN_APPROX);
+    printf("       Number of simple cycles found: %d\n", sol_aprox_par);
+    printf("       Speedup: %.2f\n", (end_aprox - start_aprox) / (end_aprox_par - start_aprox_par));
+    printf("----------------------------------------------------------\n");
+
     delete g;
     return 0;
 }
