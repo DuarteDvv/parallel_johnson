@@ -253,6 +253,8 @@ int johnson_cycles_parallel_v4(
     std::vector<int> active(G->num_nodes, 1); // todos ativos inicialmente
 
     while (s < n) {
+        double t_scc_start = CycleTimer::currentSeconds();
+
         std::vector<std::vector<int>> SCCs = BFS_foward_backward_SCCs_v4(G, active, s);
 
         std::vector<int> scc_vertices;
@@ -291,8 +293,13 @@ int johnson_cycles_parallel_v4(
             }
         }
 
+        double t_scc_end = CycleTimer::currentSeconds();
+        printf("SCC starting at %d processed in %.6f seconds, total cycles: %d\n", s, t_scc_end - t_scc_start, cycle_count);
+  
+
         active[s] = 0;
         ++s;
+    
     }
 
     return cycle_count;
