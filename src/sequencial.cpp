@@ -203,19 +203,18 @@ int johnson_cycles(
             std::cout << std::endl;
         }
 
-        // Cria unordered_set para busca O(1)
+        // unordered_set para busca O(1)
         std::unordered_set<int> scc_set(scc_vertices.begin(), scc_vertices.end());
 
         std::vector<bool> blocked(n, false);
         std::vector<std::unordered_set<int>> B(n);
-    // removido: stack
 
         double startCircuit = CycleTimer::currentSeconds();
-    circuit(s, s, G, scc_set, blocked, B, cycle_count);
+        circuit(s, s, G, scc_set, blocked, B, cycle_count);
         double endCircuit = CycleTimer::currentSeconds();
         circuit_time += (endCircuit - startCircuit);
 
-        active[s] = 0; // marca s como inativo ("remove" do grafo)
+        active[s] = 0; 
         ++s;
     }
 

@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <string>
 #include <getopt.h>
+#include <algorithm>
 
 #include <iostream>
 #include <sstream>
@@ -24,13 +25,14 @@ int main(int argc, char** argv) {
     // CLI options
     int version = -1;            // -1 => run all; 0 => sequential; 1..5 => v0..v4
     int use_binary_graph = 1;    // 1 => load binary graph; 0 => load from text
+    bool eval_mode = false;      // true => run 5x and average middle 3
 
     std::string graph_filename;
 
-    // Parse flags: -v <int>, -s
+    // Parse flags: -v <int>, -s, -eval
     // Remaining args: <path/to/graph/file> [num_threads]
     int opt;
-    while ((opt = getopt(argc, argv, "v:s")) != -1) {
+    while ((opt = getopt(argc, argv, "v:se")) != -1) {
         switch (opt) {
             case 'v':
                 version = atoi(optarg);
@@ -38,16 +40,20 @@ int main(int argc, char** argv) {
             case 's':
                 use_binary_graph = 0;
                 break;
+            case 'e':
+                eval_mode = true;
+                break;
             default:
-                std::cerr << "Usage: [-v N] [-s] <path/to/graph/file> [num_threads]\n";
+                std::cerr << "Usage: [-v N] [-s] [-e] <path/to/graph/file> [num_threads]\n";
                 return 1;
         }
     }
 
     if (optind >= argc) {
-        std::cerr << "Usage: [-v N] [-s] <path/to/graph/file> [num_threads]\n";
+        std::cerr << "Usage: [-v N] [-s] [-e] <path/to/graph/file> [num_threads]\n";
         std::cerr << "  -v N : version to execute (0=sequential, 1=v0, 2=v1, 3=v2, 4=v3, 5=v4). If omitted, run all.\n";
         std::cerr << "  -s   : load graph from text (disable binary).\n";
+        std::cerr << "  -e   : evaluation mode - run 5 times and average middle 3.\n";
         return 1;
     }
 
@@ -87,64 +93,178 @@ int main(int argc, char** argv) {
     else
         omp_set_num_threads(omp_get_max_threads());
 
+    // compute average of middle 3 from 5 runs
+    auto compute_avg_middle3 = [](std::vector<double>& times) -> double {
+        if (times.size() != 5) return times[0];
+        std::sort(times.begin(), times.end());
+        return (times[1] + times[2] + times[3]) / 3.0;
+    };
 
     auto run_seq = [&](bool print_header) {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles(g);
-        double t1 = CycleTimer::currentSeconds();
-        if (print_header) printf("Sequencial Johnson\n       Time taken: %.6f seconds\n", t1 - t0);
-        else printf("Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        printf("----------------------------------------------------------\n");
-        return t1 - t0;
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Sequencial Johnson (Evaluation mode: 5 runs)\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            printf("----------------------------------------------------------\n");
+            return avg_time;
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles(g);
+            double t1 = CycleTimer::currentSeconds();
+            if (print_header) printf("Sequencial Johnson\n       Time taken: %.6f seconds\n", t1 - t0);
+            else printf("Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            printf("----------------------------------------------------------\n");
+            return t1 - t0;
+        }
     };
 
     double seq_time = -1.0; // baseline
 
     auto run_v0 = [&]() {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles_parallel_v0(g);
-        double t1 = CycleTimer::currentSeconds();
-        printf("Parallel v0 Johnson (For main loop)\n       Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
-        printf("----------------------------------------------------------\n");
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v0 Johnson (For main loop) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v0(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v0(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v0 Johnson (For main loop)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
     };
     auto run_v1 = [&]() {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles_parallel_v1(g);
-        double t1 = CycleTimer::currentSeconds();
-        printf("Parallel v1 Johnson (Tasks)\n       Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
-        printf("----------------------------------------------------------\n");
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v1 Johnson (Tasks) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v1(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v1(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v1 Johnson (Tasks)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
     };
     auto run_v2 = [&]() {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles_parallel_v2(g);
-        double t1 = CycleTimer::currentSeconds();
-        printf("Parallel v2 Johnson (Taskgroup)\n       Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
-        printf("----------------------------------------------------------\n");
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v2 Johnson (Taskgroup) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v2(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v2(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v2 Johnson (Taskgroup)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
     };
     auto run_v3 = [&]() {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles_parallel_v3(g);
-        double t1 = CycleTimer::currentSeconds();
-        printf("Parallel v3 Johnson (Hybrid)\n       Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
-        printf("----------------------------------------------------------\n");
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v3 Johnson (Hybrid) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v3(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v3(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v3 Johnson (Hybrid)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
     };
     auto run_v4 = [&]() {
-        double t0 = CycleTimer::currentSeconds();
-        int sol = johnson_cycles_parallel_v4(g);
-        double t1 = CycleTimer::currentSeconds();
-        printf("Parallel v4 Johnson (Window Spawn)\n       Time taken: %.6f seconds\n", t1 - t0);
-        printf("       Number of simple cycles found: %d\n", sol);
-        if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
-        printf("----------------------------------------------------------\n");
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v4 Johnson (Window Spawn) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v4(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v4(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v4 Johnson (Window Spawn)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
     };
 
     if (version < 0) {
