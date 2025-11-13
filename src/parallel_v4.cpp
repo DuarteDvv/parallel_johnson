@@ -1,7 +1,6 @@
 #include "parallel_v4.hpp"
 
 #define PARALLEL_MIN_BRANCH 4
-#define PARALLEL_MAX_BRANCH 64
 #define SCC_SEQUENTIAL_RATIO 0.8
 
 std::vector<std::vector<int>> BFS_foward_backward_SCCs_v4(Graph G, const std::vector<int>& active, int min_vertex){
@@ -159,19 +158,11 @@ bool circuit_v4_parallel(
 
     const int branching = static_cast<int>(neighbors.size());
 
-    // Heurística: em grafos muito densos, evitar paralelizar completamente
-    // e cair para a versão sequencial já neste nó.
-    if (branching > PARALLEL_MAX_BRANCH && depth == 0) {
-        bool res = circuit_v4_sequential(v, s, G, scc_mask, blocked, B, cycle_count);
-        return res;
-    }
-
-    // Permitir spawn apenas no nível topo (depth==0) e somente quando o branching
-    // está em uma faixa saudável para amortizar o overhead de tarefas/copias.
+    // Permitir spawn apenas no nível topo (depth==0) e quando o branching
+    // é suficiente para amortizar o overhead de tarefas/copias.
     const bool allow_spawn =
         (depth == 0) &&
-        (branching >= PARALLEL_MIN_BRANCH) &&
-        (branching <= PARALLEL_MAX_BRANCH);
+        (branching >= PARALLEL_MIN_BRANCH);
 
     // taskgroup para sincronizar as tarefas geradas neste nível
     std::atomic<bool> any_child_found(false);
