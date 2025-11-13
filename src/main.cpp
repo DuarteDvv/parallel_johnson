@@ -16,6 +16,7 @@
 #include "parallel_v2.hpp"
 #include "parallel_v3.hpp"
 #include "parallel_v4.hpp"
+#include "parallel_v5.hpp"
 #include "sequencial.hpp"
 
 
@@ -51,7 +52,7 @@ int main(int argc, char** argv) {
 
     if (optind >= argc) {
         std::cerr << "Usage: [-v N] [-s] [-e] <path/to/graph/file> [num_threads]\n";
-        std::cerr << "  -v N : version to execute (0=sequential, 1=v0, 2=v1, 3=v2, 4=v3, 5=v4). If omitted, run all.\n";
+        std::cerr << "  -v N : version to execute (0=sequential, 1=v0, 2=v1, 3=v2, 4=v3, 5=v4, 6=v5). If omitted, run all.\n";
         std::cerr << "  -s   : load graph from text (disable binary).\n";
         std::cerr << "  -e   : evaluation mode - run 5 times and average middle 3.\n";
         return 1;
@@ -266,6 +267,33 @@ int main(int argc, char** argv) {
             printf("----------------------------------------------------------\n");
         }
     };
+    auto run_v5 = [&]() {
+        if (eval_mode) {
+            std::vector<double> times;
+            int sol = 0;
+            printf("Parallel v5 Johnson (Multi-SCC Tasks) - Evaluation mode: 5 runs\n");
+            for (int i = 0; i < 5; i++) {
+                double t0 = CycleTimer::currentSeconds();
+                sol = johnson_cycles_parallel_v5(g);
+                double t1 = CycleTimer::currentSeconds();
+                times.push_back(t1 - t0);
+                printf("       Run %d: %.6f seconds\n", i + 1, t1 - t0);
+            }
+            double avg_time = compute_avg_middle3(times);
+            printf("       Average (middle 3): %.6f seconds\n", avg_time);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / avg_time);
+            printf("----------------------------------------------------------\n");
+        } else {
+            double t0 = CycleTimer::currentSeconds();
+            int sol = johnson_cycles_parallel_v5(g);
+            double t1 = CycleTimer::currentSeconds();
+            printf("Parallel v5 Johnson (Multi-SCC Tasks)\n       Time taken: %.6f seconds\n", t1 - t0);
+            printf("       Number of simple cycles found: %d\n", sol);
+            if (seq_time > 0.0) printf("       Speedup: %.2f\n", seq_time / (t1 - t0));
+            printf("----------------------------------------------------------\n");
+        }
+    };
 
     if (version < 0) {
         // Run all versions
@@ -275,6 +303,7 @@ int main(int argc, char** argv) {
         run_v2();
         run_v3();
         run_v4();
+        run_v5();
     } else {
         // Run a specific version
         switch (version) {
@@ -301,8 +330,12 @@ int main(int argc, char** argv) {
                 seq_time = run_seq(true);
                 run_v4();
                 break;
+            case 6:
+                seq_time = run_seq(true);
+                run_v5();
+                break;
             default:
-                std::cerr << "Invalid -v value. Use 0 (seq), 1 (v0), 2 (v1), 3 (v2), 4 (v3), 5 (v4).\n";
+                std::cerr << "Invalid -v value. Use 0 (seq), 1 (v0), 2 (v1), 3 (v2), 4 (v3), 5 (v4), 6 (v5).\n";
                 delete g;
                 return 1;
         }
